@@ -116,6 +116,11 @@ adb forward tcp:8088 tcp:8088
 
 **[`apk/성원이와 아이들_남은키로_release.apk`](apk/)**
 
+- 서명된 release 빌드(약 27 MB), 시연 패널 포함
+- APK SHA-256: `ef5a500b2e44f29a105c4843bc75f48de74b27e93f8ae674f5563595635580e3`
+- 서명 인증서: `CN=Namunkiro Team, O=Namunkiro, C=KR` (인증서 SHA-256 `6cdeaeac85af6efdbf01901542c1df9835e45d8d1fd3a9465b88dd41210cef19`)
+- 확인: `certutil -hashfile <apk> SHA256`(Windows) / `sha256sum <apk>`, `apksigner verify --print-certs <apk>`
+
 ---
 
 ## 스크린샷
