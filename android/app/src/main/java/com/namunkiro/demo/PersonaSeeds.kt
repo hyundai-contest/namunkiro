@@ -8,6 +8,7 @@ import com.namunkiro.domain.model.DailyDistance
 import com.namunkiro.domain.model.ExitQuotes
 import com.namunkiro.domain.model.InsurancePlan
 import com.namunkiro.domain.model.TerminationTier
+import com.namunkiro.domain.model.TripSegment
 import com.namunkiro.domain.odometer.OdometerLedger
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -36,6 +37,8 @@ data class PersonaSeed(
     val exitQuotes: ExitQuotes = ExitQuotes(),
     val insurancePlan: InsurancePlan? = null,
     val answeredQuestions: Set<String> = emptySet(),
+    /** 기어 P→D→P 주행 이력(최근 8주, [모의]). 일별 이력을 나눠 만든 것이라 합계가 그날 거리를 넘지 않는다. */
+    val tripSegments: List<TripSegment> = emptyList(),
 ) {
     val totalKm: Double get() = history.sumOf { it.km }
     /** 시드 마지막 누적 계기판 값 = 시작 계기판 + 이력 합. */
@@ -49,6 +52,7 @@ data class PersonaSeed(
         insurancePlan = insurancePlan,
         answeredQuestions = answeredQuestions,
         demoPersonaId = id.name,
+        tripSegments = tripSegments,
     )
 }
 
@@ -91,6 +95,46 @@ object PersonaSeeds {
         PersonaId.LEE_499 -> lee499()
         PersonaId.PARK -> park()
         PersonaId.JUNG -> jung()
+    }.let { it.copy(tripSegments = segmentsFromHistory(it.history, it.demoNow)) }
+
+    /** 내비 목적지 시연 경로(FakeNaviGateway에 넣는 값, [모의]): 강릉 경포대 편도 210km. */
+    const val DEMO_NAVI_DESTINATION = "강릉 경포대"
+    const val DEMO_NAVI_ONE_WAY_KM = 210.0
+    const val DEMO_NAVI_MINUTES = 150
+
+    /**
+     * 일별 이력을 주행 단위로 나눈다(최근 [weeks]주, 지금 시각 이전 주행만).
+     * 평일: 출근 08:00대·퇴근 18:00대에 각 45%(같은 요일·시각 반복 → 루틴), 나머지는 점심 무렵 1회.
+     * 주말: 오전 11시 60%·오후 4시 40%. 10km 미만인 날은 정오 1회.
+     */
+    internal fun segmentsFromHistory(history: List<DailyDistance>, now: LocalDateTime, weeks: Long = 8): List<TripSegment> {
+        val from = now.toLocalDate().minusWeeks(weeks)
+        val out = mutableListOf<TripSegment>()
+        history.filter { !it.date.isBefore(from) && !it.date.isAfter(now.toLocalDate()) && it.km >= 1.0 }.forEach { d ->
+            val wobble = (d.date.dayOfMonth * 7 % 11).toLong() - 5          // ±5분, 실행마다 같은 값
+            val weekend = d.date.dayOfWeek == DayOfWeek.SATURDAY || d.date.dayOfWeek == DayOfWeek.SUNDAY
+            val parts: List<Pair<LocalTime, Double>> = when {
+                d.km < 10 -> listOf(LocalTime.of(12, 0) to d.km)
+                weekend -> listOf(LocalTime.of(11, 0) to d.km * 0.6, LocalTime.of(16, 0) to d.km * 0.4)
+                else -> {
+                    val leg = kotlin.math.floor(d.km * 0.45)
+                    listOf(LocalTime.of(8, 5) to leg, LocalTime.of(18, 35) to leg, LocalTime.of(12, 30) to d.km - 2 * leg)
+                }
+            }
+            parts.filter { it.second >= 1.0 }.forEach { (t, km) ->
+                val start = LocalDateTime.of(d.date, t).plusMinutes(wobble)
+                val minutes = (km * 1.6).toLong().coerceAtLeast(5)
+                val end = start.plusMinutes(minutes)
+                if (end.isAfter(now)) return@forEach
+                out += TripSegment(
+                    id = "seed-${d.date}-${t.hour}",
+                    start = start, end = end,
+                    km = kotlin.math.floor(km * 10) / 10.0,
+                    source = Source.SIMULATED,
+                )
+            }
+        }
+        return out
     }
 
     /**
