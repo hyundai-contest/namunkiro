@@ -1,0 +1,19 @@
+3240ms 01_first_run
+7105ms 02_kim_home
+11506ms 03a_panel_real_synced
+14964ms 03_real_sdk_chip
+--- phase2 start (재개, 시계는 연속 아님)
+65566ms 04_week_half_navi
+81636ms 05_navi_suggestion_card
+96153ms 05_navi_suggestion_card
+111902ms 06_trip_accepted_week
+116642ms 07_navi_end_no_suggestion
+133934ms 08_drive_lock
+136737ms 09_park_restored
+158258ms 10_gap_recovered
+171898ms 10_gap_recovered
+--- 배너 수정 후 공백 회수 재실행
+273354ms 10_gap_recovered
+relaunch→shot 8457ms
+312784ms 11_lee_exit
+327197ms 11_lee_exit
