@@ -11,6 +11,7 @@ import com.namunkiro.domain.model.Contract
 import com.namunkiro.domain.model.ExitQuotes
 import com.namunkiro.domain.model.LifeScenario
 import com.namunkiro.domain.model.PlannedTrip
+import com.namunkiro.domain.model.InsurancePlan
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -18,6 +19,8 @@ import java.time.LocalDateTime
 enum class Gate { NORMAL, DRIVING_LOCK, ANOMALY_HOLD }
 
 enum class Screen { HOME, WEEK, FORECAST, EXIT, CONTRACT, INSURANCE }
+enum class ContractField { END_DATE, TOTAL_KM, UNIT_PRICE, DEDUCT_KM, BUYOUT_PRICE, BUYOUT_WAIVES_DISTANCE_FEE, UNDERUSE_REFUND, TYPE }
+enum class VehicleConnectionStatus { WAITING, READY, TIMED_OUT, NOT_SUPPORTED, ERROR }
 
 /** 30초 시작 입력 초안. */
 data class OnboardingDraft(
@@ -60,6 +63,10 @@ data class AppUiState(
     val demoMode: Boolean = false,
     val naviSuggestion: NaviSuggestion? = null,
     val tripPattern: com.namunkiro.domain.TripPattern? = null,
+    val today: LocalDate = LocalDate.now(),
+    val demoPersonaName: String? = null,
+    val insurancePlan: InsurancePlan? = null,
+    val vehicleConnection: VehicleConnectionStatus = VehicleConnectionStatus.WAITING,
 )
 
 /** 내비 목적지 기반 예정 이동 제안. 사용자가 수락해야 예정 이동이 된다. */
@@ -75,6 +82,13 @@ data class NaviSuggestion(
 
 /** 화면 → 로직 동작. 구현은 app/AppViewModel. */
 interface AppActions {
+    fun enterDemo()
+    fun exitDemo()
+    fun rebaseOdometer()
+    fun openDeferredQuestion(kind: DeferredQuestionKind)
+    fun setInsurancePlan(plan: InsurancePlan?)
+    /** null은 선택 조건을 미확인으로 되돌린다. 필수 조건은 null을 허용하지 않는다. */
+    fun updateContractField(field: ContractField, value: String?)
     fun navigate(screen: Screen)
     fun onboardingSetEndDate(date: LocalDate)
     fun onboardingSetTotalKm(km: Int)
@@ -98,6 +112,12 @@ interface AppActions {
 
 /** Preview·테스트용 빈 구현. */
 object NoopActions : AppActions {
+    override fun enterDemo() {}
+    override fun exitDemo() {}
+    override fun rebaseOdometer() {}
+    override fun openDeferredQuestion(kind: DeferredQuestionKind) {}
+    override fun setInsurancePlan(plan: InsurancePlan?) {}
+    override fun updateContractField(field: ContractField, value: String?) {}
     override fun navigate(screen: Screen) {}
     override fun onboardingSetEndDate(date: LocalDate) {}
     override fun onboardingSetTotalKm(km: Int) {}

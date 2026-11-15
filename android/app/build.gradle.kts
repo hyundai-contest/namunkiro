@@ -61,6 +61,7 @@ android {
 
 dependencies {
     implementation(libs.pleos.vehicle)
+    implementation(libs.pleos.navihelper)
     implementation(libs.kotlin.reflect)
     implementation(libs.kotlinx.serialization.json)
 

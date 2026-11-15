@@ -1,6 +1,7 @@
 package com.namunkiro.vehicle
 
 import ai.pleos.playground.navi.constants.NaviErrorCode
+import ai.pleos.playground.navi.constants.NaviMode
 import ai.pleos.playground.navi.constants.NavigationStatus
 import ai.pleos.playground.navi.data.DestinationArrivedInfo
 import ai.pleos.playground.navi.data.DestinationInfo
@@ -71,6 +72,8 @@ class PleosNaviGateway(
             val cur = _state.value.destination
             // 같은 목적지의 남은 거리·시간만 갱신(0.5km 이상 바뀔 때만 상태를 흔든다)
             val km = dst.distance / 1000.0
+            // 실측(11-15): 안내 종료 직전 distance=0·duration=0인 DrivingInfo가 한 번 온다 → 무시
+            if (dst.distance <= 0) return
             if (cur == null) {
                 setDestination(dst.name.ifBlank { null }, null, null, dst.distance, dst.duration, keepCoordinates = true)
             } else if (cur.remainingKm == null || kotlin.math.abs(cur.remainingKm - km) >= 0.5) {
@@ -80,7 +83,9 @@ class PleosNaviGateway(
 
         override fun onRouteStateInfo(routeStateInfo: RouteStateInfo) {
             Log.i(TAG, "onRouteStateInfo $routeStateInfo")
-            if (!routeStateInfo.isRouting) _state.update { it.copy(destination = null) }
+            // 실측(11-15): 안내 중에도 isRouting=false로 온다 → isRouting은 쓰지 않고 naviMode로만 판단
+            val m = routeStateInfo.naviMode
+            if (m == NaviMode.SAFE_GUIDING || m == NaviMode.NOT_WORKING) _state.update { it.copy(destination = null) }
         }
 
         override fun onNavigationStatus(status: NavigationStatus) {

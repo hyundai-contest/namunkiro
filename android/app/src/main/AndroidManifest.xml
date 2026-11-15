@@ -8,6 +8,8 @@
 
     <!-- 실제로 쓰는 API의 권한만 선언: 누적 주행거리(Odometer)·기어(Gear) -->
     <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
+    <!-- 순정 내비 목적지·경로 정보 조회(NaviHelper getDestinationInfo·getRouteStateInfo, Normal) -->
+    <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
 
     <application
         android:allowBackup="false"

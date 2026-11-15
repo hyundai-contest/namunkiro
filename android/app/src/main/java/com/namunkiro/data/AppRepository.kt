@@ -8,6 +8,7 @@ import com.namunkiro.domain.model.InsurancePlan
 import com.namunkiro.domain.model.LifeScenario
 import com.namunkiro.domain.model.PlannedTrip
 import com.namunkiro.domain.model.SplitPlan
+import com.namunkiro.domain.model.TripSegment
 import com.namunkiro.domain.odometer.OdometerLedger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,10 @@ data class AppData(
     val answeredQuestions: Set<String> = emptySet(),
     /** 시연 시드가 적용돼 있으면 페르소나 id(화면의 [모의] 표시용). 실사용은 null. */
     val demoPersonaId: String? = null,
+    /** 기어 P→D→P로 나뉜 관측 주행(앱이 화면에 있던 동안만). 시드는 source=SIMULATED. */
+    val tripSegments: List<TripSegment> = emptyList(),
+    /** 사용자가 '제안 안 받기'를 고른 내비 목적지 이름. 같은 목적지는 다시 제안하지 않는다. */
+    val dismissedNaviDestinations: Set<String> = emptySet(),
 )
 
 @Serializable
@@ -69,6 +74,8 @@ class AppRepository(private val store: JsonFileStore) {
         insurancePlan = store.read(K_INSURANCE, InsurancePlan.serializer()),
         answeredQuestions = store.read(K_ANSWERED, SetSerializer(String.serializer())).orEmpty(),
         demoPersonaId = store.read(K_DEMO, DemoMeta.serializer())?.personaId,
+        tripSegments = store.read(K_SEGMENTS, ListSerializer(TripSegment.serializer())).orEmpty(),
+        dismissedNaviDestinations = store.read(K_NAVI_DISMISSED, SetSerializer(String.serializer())).orEmpty(),
     )
 
     /** 디스크에서 다시 읽는다(외부에서 파일을 바꾼 경우). */
@@ -123,6 +130,21 @@ class AppRepository(private val store: JsonFileStore) {
         _data.update { it.copy(insurancePlan = plan) }
     }
 
+    fun saveTripSegments(segments: List<TripSegment>) {
+        store.write(K_SEGMENTS, ListSerializer(TripSegment.serializer()), segments)
+        _data.update { it.copy(tripSegments = segments) }
+    }
+
+    /** 주행 한 번 추가. 오래된 것은 [MAX_SEGMENTS]개까지만 보관한다. */
+    fun addTripSegment(segment: TripSegment) =
+        saveTripSegments((current.tripSegments + segment).sortedBy { it.start }.takeLast(MAX_SEGMENTS))
+
+    fun dismissNaviDestination(name: String) {
+        val names = current.dismissedNaviDestinations + name
+        store.write(K_NAVI_DISMISSED, SetSerializer(String.serializer()), names)
+        _data.update { it.copy(dismissedNaviDestinations = names) }
+    }
+
     fun markQuestionAnswered(kindName: String) = saveAnsweredQuestions(current.answeredQuestions + kindName)
 
     fun saveAnsweredQuestions(names: Set<String>) {
@@ -133,7 +155,7 @@ class AppRepository(private val store: JsonFileStore) {
     /** 전체 교체(데모 시드 적용). */
     fun replaceAll(data: AppData) {
         // 전환 중 강제 종료에도 모드별 백업은 지우지 않는다.
-        listOf(K_CONTRACT, K_HISTORY, K_LEDGER, K_TRIPS, K_SPLITS, K_SCENARIOS, K_QUOTES, K_INSURANCE, K_ANSWERED, K_DEMO).forEach(store::delete)
+        listOf(K_CONTRACT, K_HISTORY, K_LEDGER, K_TRIPS, K_SPLITS, K_SCENARIOS, K_QUOTES, K_INSURANCE, K_ANSWERED, K_DEMO, K_SEGMENTS, K_NAVI_DISMISSED).forEach(store::delete)
         data.contract?.let { store.write(K_CONTRACT, Contract.serializer(), it) }
         store.write(K_HISTORY, ListSerializer(DailyDistance.serializer()), data.history)
         store.write(K_LEDGER, OdometerLedger.serializer(), data.ledger)
@@ -144,6 +166,8 @@ class AppRepository(private val store: JsonFileStore) {
         data.insurancePlan?.let { store.write(K_INSURANCE, InsurancePlan.serializer(), it) }
         store.write(K_ANSWERED, SetSerializer(String.serializer()), data.answeredQuestions)
         store.write(K_DEMO, DemoMeta.serializer(), DemoMeta(data.demoPersonaId))
+        store.write(K_SEGMENTS, ListSerializer(TripSegment.serializer()), data.tripSegments)
+        store.write(K_NAVI_DISMISSED, SetSerializer(String.serializer()), data.dismissedNaviDestinations)
         _data.value = data
     }
 
@@ -161,6 +185,9 @@ class AppRepository(private val store: JsonFileStore) {
         private const val K_INSURANCE = "insurance_plan"
         private const val K_ANSWERED = "answered_questions"
         private const val K_DEMO = "demo_meta"
+        private const val K_SEGMENTS = "trip_segments"
+        private const val K_NAVI_DISMISSED = "navi_dismissed"
+        const val MAX_SEGMENTS = 2_000
 
         /** 앱 내부 저장소(`files/namunkiro/`)에 둔다. */
         fun create(context: Context): AppRepository =

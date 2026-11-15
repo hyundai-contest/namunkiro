@@ -40,7 +40,7 @@ object PreviewFixtures {
         tripImpacts = emptyList(), endKmPoint = 62353.5, endFeePoint = 235350)
     val home = AppUiState(contract = contract, odometer = Sourced(21312.0, Source.SIMULATED), budget = budget, forecast = noTripForecast,
         historySimulated = true, demoMode = true)
-    val weekState = home.copy(forecast = forecast, trips = listOf(PlannedTrip("gangneung", week.weekStart.plusDays(5), 420, "강릉 왕복", Source.SIMULATED)))
+    val weekState = home.copy(forecast = forecast, trips = listOf(PlannedTrip("gangneung", week.weekStart.plusDays(5), 420, "강릉 경포대", Source.SIMULATED)))
     /** 정 주임: 연 8천 km 페이스의 저주행 시나리오. 환급 조건은 미확인이다. */
     val jung = home.copy(
         contract = contract.copy(underuseRefund = null),
