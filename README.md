@@ -45,7 +45,7 @@ adb shell am start --user 10 -n com.namunkiro/.app.MainActivity
 4. 예시를 끝내려면 헤더 칩 **"[모의] 김 대리 예시 보는 중 · 내 데이터로"**를 누릅니다.
 
 - 예시 데이터(계약·과거 주행 이력·날짜)는 화면에 **[모의]**로 표시됩니다. 계산은 실제 앱 코드 그대로입니다.
-- 시연 설정 패널(헤더 ⚙: 인물 4명 전환, 날짜 이동, 모의/실제 차량 전환, 가짜 내비 목적지)은 `BuildConfig.DEMO_PANEL`이 켜진 빌드(debug·demo)에서 열립니다. release 빌드에는 ⚙가 없고 김 대리 예시만 볼 수 있습니다.
+- 시연 설정 패널(헤더 ⚙: 인물 4명 전환, 날짜 이동, 모의/실제 차량 전환, 가짜 내비 목적지)은 제출용 release APK에도 포함되어 있습니다(`BuildConfig.DEMO_PANEL=true`). [예시로 둘러보기] 후 헤더 ⚙에서 인물을 바꿔 출구·보험·여유 장면을 볼 수 있습니다.
 - 내 계약으로 쓰려면 **[내 계약으로 시작]**에서 만기일·총 약정거리·초과 단가 3가지를 넣습니다. 시작 계기판은 차량 값으로 자동으로 채워집니다.
 
 ### 2.3 빌드 방법
@@ -59,7 +59,7 @@ cd android
 
 - 필요 환경: JDK 17, Android SDK(compileSdk 37 / targetSdk 35 / minSdk 28). Gradle wrapper가 Gradle 9.6.0을 받습니다(AGP 9.5.1, Kotlin 2.2.10).
 - Pleos SDK는 `ai.pleos.playground` Maven 저장소에서 받습니다(`android/settings.gradle.kts`에 설정됨).
-- 배포 서명 키는 저장소에 포함하지 않습니다.
+- 제출 APK는 팀 release 키로 서명되어 있어 바로 설치할 수 있습니다. 서명 키와 비밀번호(`android/keystore.properties`)는 저장소에 포함하지 않으며, 파일이 없으면 `assembleRelease` 결과물은 서명되지 않습니다(직접 빌드할 때는 `assembleDebug` 또는 자체 키 사용).
 
 ## 3. 테스트 환경 및 필요한 설정
 
