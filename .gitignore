@@ -1,0 +1,14 @@
+*.iml
+.gradle
+local.properties
+.idea
+.kotlin
+build
+/android/app/build
+captures
+.DS_Store
+docs/sdk-src
+design/spec_v3.docx
+*.jks
+*.keystore
+keystore.properties
