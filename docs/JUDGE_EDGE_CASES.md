@@ -70,3 +70,36 @@ adb pull /sdcard/judge.png docs/rehearsal/judge/
 공백 회수를 실측하기 위한 `POST /browser/session` → `PUT /vehicle/odometer?traveled_distance_km=20000.5` → `am start` 명령이 도구의 자동 승인 검토에서 `rejected: blocked by policy`로 차단되었다. 구체적인 차단 사유는 반환되지 않았다. 차단된 동작을 우회하지 않았으며 이 공백 회수 실측을 통과로 보고하지 않는다.
 
 이번 문서의 P0 처리 완료: 숨은 데모 진입, 개인 데이터 삭제, null 신호 영구 주행 잠금, 급증 보류 재기준 부재. null 장기 지속·서비스 미지원 주입, 공백 회수 실측, 입력 경계 전체, 만기 경과 UI, en-US·추가 시간대 검증이 남아 있으므로 전체 심사관 엣지케이스 검증 완료로 선언하지 않는다.
+
+## V2-C JVM 추가 검증 (2026-11-15)
+
+에뮬레이터를 사용하지 않았다. 아래 결과는 실제 SDK·화면 조작 실측과 구분한 **단위 테스트** 결과다.
+
+- 명령: `android/`에서 `./gradlew :app:assembleDebug :app:testDebugUnitTest --max-workers=1`.
+- 결과: **BUILD SUCCESSFUL, 67개 테스트 / 실패 0 / 오류 0**. 기존 53개에 `app/JudgeEdgeCasesTest` 14개를 추가했다.
+- 실행 근거: `android/app/build/test-results/testDebugUnitTest/TEST-com.namunkiro.app.JudgeEdgeCasesTest.xml` 및 같은 폴더의 전체 6개 테스트 스위트.
+
+| 검증 항목 | 결과·범위 |
+|---|---|
+| null 차량 신호 장기 지속 | 9,999ms에는 대기, 10,000ms·1분·7일에는 `TIMED_OUT`, `Gate.NORMAL` 유지와 재시도 문구 검증; 실제 ViewModel은 포그라운드·재시도 10초 후 상태를 갱신 |
+| 차량 신호 미지원 | `FakeVehicleGateway`에 두 capability `NOT_SUPPORTED`, UNKNOWN 기어·null UXR 주입 후 3회 refresh; 미지원 상태·안내 문구·비잠금 및 거리 미수신 유지 검증 |
+| 서비스 오류·복구 | Fake 오류는 `ERROR` 안내, 오류 제거·refresh 뒤 `READY`; 명시적 주행 제한/D 기어는 미지원·보류보다 잠금 우선 |
+| P 신호만 수신 | null UXR에서도 `READY`·비잠금, 보류는 별도 `ANOMALY_HOLD` |
+| 온보딩 경계 | 과거·당일·20년 초과 만기 및 null 거부, 내일/20년 경계 허용; 거리/단가의 null·0·음수·과대값 거부와 양쪽 허용 경계 검증; UI·ViewModel이 같은 `AppPolicies` 사용 |
+| 계약 편집 저장 | 8종 필드 수정이 저장소 재생성 후 유지; 잘못된 값은 기존 파일 보존, false와 미확인(null)을 구분; 저장 상태로 엔진 재계산해 약정 변경 시 정산 감소 확인 |
+| 보험 모드 | 기간·계기판·구간 검증, 디스크 복원, 엔진의 남은 거리/주간 목표 계산, 끄기(null 삭제) 검증 |
+| 만기 지난 계약 | 계약 후 주행 제외, 거리 정산·0원 목표 없음·홈 `ENDED` 상태와 출구 엔진 무예외 검증; ViewModel이 예측 기준일을 만기 다음 날로 고정해 시간이 지나도 예상액이 줄지 않도록 수정 |
+| Locale.US·시간대 | 전역 Locale.US에서 LA/서울의 자정 경계 날짜를 각각 확인; `yyyy.MM.dd`, 한국어 요일/오후 시각·쉼표 숫자·만 원 금액 유지 검증, 테스트 후 전역 설정 복원 |
+
+### 상태·액션 계약 변경 및 저장 경로
+
+- `ui/state/AppUiState.kt`: `AppActions`에 `enterDemo`, `exitDemo`, `rebaseOdometer`, `openDeferredQuestion`, `setInsurancePlan`, `updateContractField(ContractField, String?)` 추가하고 `NoopActions` 갱신. 상태에 앱 기준일·시연 인물명·보험 원본 계획·차량 연결 상태를 추가했다.
+- `app/AppViewModel.kt`: 위 동작 override, 재질문은 이전 응답 이력과 무관하게 직접 열기, `AppSettings`를 통한 계약/보험 검증·저장, 저장소 StateFlow 변경으로 엔진 재계산. 시연/재기준은 기존 동작을 유지한다.
+- `app/AppPolicies.kt`, `app/AppSettings.kt`: 실제 ViewModel이 사용하는 순수 검증·저장 경계를 분리해 JVM에서 검증했다. Android ViewModel 생성·Compose 렌더 자체를 JVM 테스트한 것으로 해석하지 않는다.
+- V2 화면에서 `actions as? AppViewModel` 및 `demoPanel` 직접 읽기를 제거했다. 헤더는 반쪽 창에서 시연 칩에 별도 한 줄을 주고, 같은 헤더의 `[모의]` 중복 배지를 없앴다.
+
+### UX 재검토 대상과 남은 실측
+
+변경 화면: 온보딩, 공통 헤더·연결 상태, 시연 복귀 칩, 급증 보류, 계약 체크리스트·편집 시트, 보험 조건 시트, 만기 지난 홈, 출구/근거의 단위·날짜 표기. 조정자가 AGENTS의 UX 게이트에 따라 캡처 후 검토를 요청해야 한다.
+
+실제 SDK의 null 장기 지속·미지원 capability 주입, 공백 회수 재부팅 실측, 날짜 선택기·키보드·반쪽 창의 실제 배치와 계약/보험 편집 터치 흐름, 다른 로케일의 실제 렌더링은 미실측이다. 위 JVM 통과로 이 항목이나 전체 심사관 엣지케이스의 실측 완료를 선언하지 않는다.

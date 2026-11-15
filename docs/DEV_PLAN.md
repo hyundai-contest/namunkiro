@@ -1,10 +1,12 @@
 ﻿# 남은키로 개발 계획 (v3 명세 기준, 시연 제약 반영)
 
-작성: 2026-11-15. 기준 명세: 신청서 v3(`design/spec_v3_content.py`). 이전 PoC(`AndroidStudioProjects/hackathon`)에서 실측한 사실을 근거로 한다.
+작성: 2026-11-15, **최종 갱신: 2026-11-15(개발 완료 시점, v2 화면 기준)**. 기준 명세: 신청서 v3(`design/spec_v3_content.py`). 이전 PoC에서 실측한 사실을 근거로 한다.
+
+> 현재 구현의 최종 명세는 [`docs/FINAL_SPEC.md`](FINAL_SPEC.md)다. 이 문서는 계획·로직 명세·시연 대본이며, 구현과 달라진 부분은 각 절에 "현재 구현"으로 표시했다.
 
 목표 일정
-- 11/15 23:59: 1차 접수(기획서 필수, APK·영상은 가산점). 오늘은 골격과 엔진, 가능하면 동작 APK까지.
-- 12/3~4: 2차 PT. **현장에서 Pleos 에뮬레이터로 직접 시연.** 실차 없음. 이 날까지 앱 완성.
+- 11/15 23:59: 1차 접수(기획서 필수, APK·영상은 가산점). → 동작 APK·저장소·리허설 캡처까지 완료.
+- 12/3~4: 2차 PT. **현장에서 Pleos 에뮬레이터로 직접 시연.** 실차 없음.
 
 원칙: 시연에서 **실제로 동작하는 것과 모의 데이터인 것을 화면에서 구분**한다(운영측 답변). 구현하지 않은 기능을 구현한 것처럼 보이게 하지 않는다.
 
@@ -16,10 +18,10 @@
 |---|---|---|---|
 | 누적 주행거리 | SDK 소스 확인: `vehicle.getOdometer()` → `checkCurrentDistanceDrivenCapabilities`, `getCurrentDistanceDriven(onComplete: (Float?) -> Unit)` km 단위, `registerDistanceDriven(DistanceDrivenListener)` → `onDistanceDrivenUpdated(Float?)` km. 권한 `pleos.car.permission.CAR_DRIVE` | 핵심 입력. capability 확인 후 구독 | Virtual Console(VC)에서 주행거리 값을 올려 실시간 반영. **VC는 기존보다 큰 값만 받는다** → 역행 시연 불가 |
 | 기어 | SDK 소스 확인: `vehicle.getGear()` → `getCurrentGearSelectionState`, `registerGearSelection(GearSelectionListener)`, `VehicleGear.GEAR_PARK/DRIVE…`, 권한 CAR_DRIVE | 상세 화면 게이트, 주행 단위(P→D→P) 구분 | VC 기어 P/D 전환 |
-| 주행 중 화면 제한 | CarUxRestrictionsManager. 차속은 VC 재현 불가 | 제한 시 잠금 화면 | `adb shell cmd hmg_car_service --service drivingstate driving_regulation on/off` + VC 기어 D |
+| 주행 중 화면 제한 | CarUxRestrictionsManager. 차속은 VC 재현 불가. 이 이미지에는 `hmg_car_service`가 없음(실측) | 제한 시 잠금 화면 | **VC 기어 D만으로 UXR 활성**(D·R → 제한, P → 해제, 실측) |
 | 시동 ON/OFF | **VC 재현 불가**, IGNITION_STATE 실차 미확인, 시동 OFF 후 앱 동작 보장 없음 | 시동 이벤트에 의존하지 않는다. 앱이 화면에 올라올 때마다 재조회하고, 마지막 승인값과의 차이로 공백 구간 거리를 회수 | "시동 끔 → 다른 날 시동 켬"은 **앱 강제 종료 → VC로 거리 증가 → 앱 재실행**으로 재현. 자막: "앱 재시작으로 시동 재시작을 대신 표현" |
 | 시간 경과 | 주 경계, 90일, 1년 4개월을 실제 시간으로 재현 불가 | 모든 계산은 `AppClock` 인터페이스로 현재 시각을 받는다 | 데모 모드의 `DemoClock`으로 날짜를 옮기고, 페르소나별 일별 주행 이력을 시드로 넣는다. 시드 구간은 [모의] 배지 |
-| 등록 목적지 | NaviHelper 콜백 이벤트 실수신 미확인, 에뮬레이터 경로 계산 실패 보고 | 예정 이동은 **수동 입력이 기본**, NaviHelper 조회는 성공 시 후보로 덧붙임 | 시연은 수동 입력 또는 시드 목적지. NaviHelper는 Phase 2에서 실측 후 연결 |
+| 등록 목적지 | **실측 완료**: 순정 내비에서 안내 시작 시 `onRouteStarted`·`getDestinationInfo` 수신(이름·남은 거리). 안내 중에도 `isRouting=false`, 앱이 가려지면 이벤트 지연 | 목적지 → 왕복 제안 카드([이번 주 계획에 넣기]). 수동 [예정 이동 추가]도 유지 | 반쪽 창에서 실제 순정 내비 목적지로 실시간 시연. 내비 미설치 시 데모 패널 가짜 내비 |
 | 위치 | GPS 이동 VC 불가 | MVP 제외 | — |
 | 앱 표시 영역 | 2560x1440 중 오른쪽 앱 영역 약 1682x1210(실측). 반쪽 창 가능 | 반응형: 넓은 창 2열, 좁은 창 1열 | 기본 가로 창으로 시연 |
 | 백그라운드 | 앱이 화면에서 사라져도 남을 수 있으나 보장 없음. 앱이 스스로 앞으로 나오는 방법 미확인 | 알림·자동 기동에 의존하지 않음. "정차 중 한 번 알림"은 **앱을 열었을 때 상단 배너**로 구현 | — |
@@ -37,40 +39,47 @@
 
 단일 앱 모듈, 패키지로 경계를 나눈다. 도메인은 Android 의존 없는 순수 Kotlin(단위 테스트 대상).
 
+현재 구현(개발 완료 시점):
 ```
 android/app/src/main/java/com/namunkiro/
 ├── core/
 │   ├── time/        AppClock(interface), SystemClock, DemoClock
-│   └── result/      VehicleReading(값+출처+시각), Source(OBSERVED/INPUT/ESTIMATED/UNCONFIRMED/SIMULATED)
-├── vehicle/         VehicleGateway(interface), PleosVehicleGateway(Odometer·Gear), UxRestrictionGateway, FakeVehicleGateway
-├── data/            Room DB: ContractEntity, OdometerSampleEntity, WeekLedgerEntity, PlannedTripEntity, ExitQuoteEntity / Repository
+│   └── result/      Source(OBSERVED/INPUT/ESTIMATED/UNCONFIRMED/SIMULATED)
+├── vehicle/         VehicleGateway(interface), PleosVehicleGateway(Odometer·Gear·CarUxRestrictions), FakeVehicleGateway,
+│                    NaviGateway(interface), PleosNaviGateway(NaviHelper 목적지), 가짜 내비
+├── data/            JsonFileStore(원자적 JSON 파일 저장), AppRepository(개인/시연 별도 백업)
 ├── domain/
-│   ├── odometer/    OdometerIngestor: raw→accepted, 이상값·역행 보류, 공백 회수
-│   ├── budget/      WeeklyBudgetEngine: 기본 예산·이월·분할·누적 잔고·회복 판정
-│   ├── forecast/    ForecastEngine: 평일/주말 기준선, 범위, 예정 이동·시나리오
-│   ├── exit/        ExitCalculator: 같은 종료일 기준 반납/인수 보유/인수 매각/승계/해지, ExitCalendar
-│   └── insurance/   InsuranceTierPlanner: 보험 기간·구간 상한 (budget 엔진 재사용)
+│   ├── odometer/    OdometerIngestor: raw→accepted, 급증·역행 보류, 공백 회수
+│   ├── budget/      WeeklyBudgetEngine: 0원 목표 페이스·만기 예상·회복 판정·저사용 권장(이월·분할은 내부만)
+│   ├── forecast/    ForecastEngine: 최근 4주 평일/주말 기준선, 범위, 예정 이동·시나리오
+│   ├── exit/        ExitCalculator: 만기까지 타기 / 지금 나가기 두 묶음, ExitCalendar
+│   ├── insurance/   InsuranceTierPlanner: 보험 기간·구간 상한
+│   └── trip/        TripPatternEngine: 기어 기반 주행 구간에서 요일별 평소 거리·루틴 비중
 ├── ui/
-│   ├── theme/       design-tokens.md를 옮긴 Color/Type/Dimens
-│   ├── components/  BudgetRing, WeekBars, RangeBand, Badge, Card, BigNumber
-│   └── screens/     Onboarding, Home, Week, Forecast, Exit, Contract, Insurance, DrivingLock, AnomalyHold, DeferredQuestion
-├── app/             MainActivity, AppViewModel(화면 상태 조립), Navigation
-└── demo/            DemoController, PersonaSeeds(김 대리/이 과장/박 과장), DemoPanel(데모 빌드에서만)
+│   ├── v2/          현재 화면: AppScreenV2(게이트·탭), Home, Week, Forecast, ExitV2, ContractV2(+보험),
+│   │                OnboardingV2, DrivingLockV2, AnomalyHoldV2, NaviSuggestionCard, WhySheetV2, DeferredQuestionSheetV2,
+│   │                CostModel(모든 km→원 계산), components/Charts
+│   ├── state/       AppUiState·AppActions(화면 계약)
+│   ├── theme/       디자인 토큰
+│   └── screens/, AppScreen.kt   v1 화면(코드에 남아 있으나 MainActivity에서 사용하지 않음)
+├── app/             MainActivity, AppViewModel(상태 조립), TripSegmenter(기어 P→D→P 주행 구간), AppPolicies·AppSettings(입력 검증·저장)
+└── demo/            DemoController, PersonaSeeds(김 대리/이 과장 90일·1년 4개월/박 과장/정 주임), DemoPanel
 ```
 
 데이터 흐름
 ```
-VehicleGateway(odometer km, gear, uxRestricted)
-   → OdometerIngestor(검사·회수) → OdometerSample(승인값, 출처)
-   → WeeklyBudgetEngine / ForecastEngine / ExitCalculator (AppClock 기준)
-   → AppViewModel(StateFlow<UiState>) → Compose 화면
-Contract(입력·점진 질문) ─────────────┘
+VehicleGateway(odometer km, gear, uxRestricted) ─→ OdometerIngestor(검사·회수) → 장부·일별 거리
+                                               └→ TripSegmenter(기어) → 주행 구간 → TripPatternEngine
+NaviGateway(목적지 이름·남은 거리) → 제안 카드 → 예정 이동
+   → WeeklyBudgetEngine / ForecastEngine / ExitCalculator (AppClock 기준) + CostModel
+   → AppViewModel(StateFlow<AppUiState>) → Compose v2 화면
+Contract(입력·지연 질문) ─────────────┘
 ```
 
-빌드 변형
-- `debug`: 데모 패널 포함, FakeVehicleGateway 전환 가능.
-- `demo`(release 서명): PT·영상용. 데모 패널은 앱 제목 길게 누르기로 열림, 시드 데이터는 [모의] 배지.
-- `release`: 데모 패널·시드 없음(제출 APK는 demo와 release 둘 다 첨부할지 결정).
+빌드 변형(현재 구현)
+- `debug`: `DEMO_PANEL=true`. 헤더 ⚙로 시연 설정 패널(인물·날짜·모의/실제 차량·가짜 내비).
+- `demo`: debug 기반, 디버깅 불가, `DEMO_PANEL=true`. PT·영상용.
+- `release`: `DEMO_PANEL=false`, R8 최적화. 첫 화면 [예시로 둘러보기](김 대리 예시)는 그대로 있고 ⚙ 패널만 없다. 제출 APK는 `apk/성원이와 아이들_남은키로_release.apk`.
 
 ---
 
@@ -82,16 +91,18 @@ Contract(입력·점진 질문) ─────────────┘
   - `Δ < -ε`(ε=0.1km): 역행 → 보류.
   - `Δ > 250 × Δt(h) + ε`(같은 세션, 단조 시간 기준): 급증 → 보류(E 화면).
   - 세션 사이 공백(앱이 꺼져 있던 동안)의 증가는 **승인하되 "공백 구간"으로 표시**하고 요일별 학습에서는 제외. 단 공백 시간 대비 250km/h 상한을 넘으면 보류.
-- 보류 해제: [다시 조회]로 재수신해 규칙을 통과할 때만. 사용자 확인 한 번으로 급증을 승인하지 않는다.
+- 보류 해제: [다시 확인]으로 재수신해 규칙을 통과할 때, 또는 [N km를 새 기준으로](확인 대화상자)로 **계기판 기준을 옮길 때**. 새 기준은 급증분을 주행으로 더하지 않고 기존 기록을 유지한 채 계약 시작 계기판을 같은 차이만큼 이동한다. 급증을 주행으로 승인하는 버튼은 없다.
+- 시연 모드에서만 허용치에 여유분 100 km를 더한다(VC가 +12·+50 km를 한 번에 올리기 때문). 개인 모드는 여유분 0.
 - 일별 집계: 승인값의 날짜별 첫·마지막 차이. 공백 구간이 걸친 날은 "미분류" 거리로 따로 둔다.
 
 ### 3.2 초과 0원 목표 주간 페이스 (WeeklyBudgetEngine)
 
+- **현재 구현(v2 화면)**: 화면 숫자는 `ui/v2/CostModel.kt` 하나로 계산한다. 0원 목표는 **내림**(김 대리 ⌊281.59⌋ = 주 281 km), 제목은 "주 ⌈현재 페이스 − 0원 목표⌉ km 줄이면 0원"(298.75 − 281 → **주 18 km**), 히어로는 초과 2,353 km × 100원 = **235,300원**(화면 거리 반올림, 엔진 원값 235,350원) → "24만 원". 아래 282·279·+3.9만 원은 설계 당시 반올림·토요일 가정의 예시이고, 실제 화면 캡처 값은 `docs/FINAL_SPEC.md` 4절과 `docs/rehearsal/final/REPORT.md` 5.2를 따른다.
 - 사용자 화면은 이월·분할·조정 예산 대신 **초과0원 목표 = (총약정거리 + 공제 − 실제사용) ÷ 남은 주수**를 중심으로 구성한다. 값은 `BudgetSnapshot.zeroFeeWeeklyKm`를 사용하며 공제0이면 `requiredWeeklyKm`과 같다.
 - 김 대리:2028-03-16, 계약501일 경과,1,461일 중960일 남음,21,382km 사용. `(60,000−21,382)÷(960÷7)=281.589583km/주` → 표시 약282km. 이번 주186km 사용이므로 목표 대비95.589583km → 표시 약96km 남음. 반올림282를 매주 정확히 지키면0원이 보장된다는 표현은 쓰지 않는다.
 - 현재 페이스 비용: 계약 시작 이후 평균은 `21,382÷501×7=298.75km/주`이고 예상만기62,353.50km, 초과2,353.50km×100원 =235,350원. 최근4주294km/주와 전체평균299km/주를 구분한다. 공제 미확인이면0가정 잠정값과 미확인을 함께 표시한다.
-- 예정 이동: 강릉420km가 토요일 평소32km를 대체하므로 추가388km, `TripImpact.extraFee=38,800원`이다. 문구는 **“이 차로 가면 +3.9만 원 · 목표 279km”**. 같은 잔여기간에서 추가388km를 반영한 계획 미리보기는278.760417km/주이며, 실제 일요일3/19 주간684km 주행 완료 후 누적21,880km·잔여957일이면278.829676km/주다. 둘 다 표시 약279km다.
-- 계획 입력만으로 실제 사용을 바꾸지 않는다. 기록 기반 `zeroFeeWeeklyKm`는 실주행 전281.59km이며 계획 반영279km는 별도 미리보기임을 구분한다. 다른 차 전환은420→0km이므로 계획 유지 대비42,000원 감소이고, 평소32km 대비 여행 증가38,800원과 혼용하지 않는다.
+- 예정 이동(설계 예시): 강릉420km가 토요일 평소32km를 대체하므로 추가388km, `TripImpact.extraFee=38,800원`이다. **현재 화면**은 '이 차로 가면' 문구 대신 내비 제안 카드·이번 주 화면에서 "평소보다 +N km · 0원 목표 주 281 → 278 km · +3.8만 원"(가짜 내비 강릉 경포대 왕복 420 km, 금요일 평소 44 km 기준)으로 보여 준다. 같은 잔여기간에서 추가388km를 반영한 계획 미리보기는278.760417km/주이며, 실제 일요일3/19 주간684km 주행 완료 후 누적21,880km·잔여957일이면278.829676km/주다. 둘 다 표시 약279km다.
+- 계획 입력만으로 실제 사용을 바꾸지 않는다. 기록 기반 `zeroFeeWeeklyKm`는 실주행 전281.59km이며 계획 반영 목표는 별도 미리보기임을 구분한다. 엔진에는 다른 차 전환(`PlannedTrip.otherCar`, 420→0km, 계획 유지 대비42,000원 감소) 계산이 남아 있지만 **v2 화면에는 '다른 차로' 토글이 없다**(계획은 [계획에서 빼기]로 제외).
 - 감축 탄력: `주10km × 남은 주수 × 단가`, 단 기존 초과정산액을 한도로 감소하고0원 아래로 내리지 않는다. 김 대리960일이면 약137,143원(13.7만 원), 이 과장90일 시점 잔여1,371일이면 약195,857원(19.6만 원) 감소다. 조건을 밝힌 가정 계산이며 확정 할인이나 신규 엔진 필드가 아니다.
 - 회복 판정은 기존 엔진 유지: 필요 주간 페이스가 최근4주 평균의60% 미만 또는0이하이면 HARD_TO_RECOVER. 이 과장 필요273km/주·최근513km/주는 약53%다. 화면은 무리한 감축을 요구하지 않고 비용 변화량·출구 비교를 우선 안내한다.60%는 검증 전 제품 가설이다.
 - 목표는 사용·시간에 따라 재계산한다. 덜 타는 사용자는 목표를 채우도록 유도하지 않고 미사용 약정·다음 계약 약정 낮추기를 안내한다. 공제 포함 잔여약정이 음수면 감축만으로0원이 불가능하고, 남은 기간이 없으면 목표값은 없다.
@@ -102,7 +113,9 @@ Contract(입력·점진 질문) ─────────────┘
 - 기준선: 최근 4주(데이터 부족 시 가용 기간)의 평일 평균·주말 평균. 공백 구간 거리는 제외.
 - 범위: 장기 추세(계약 시작 이후 평균)와 최근 추세(최근 4주)로 각각 만기 거리를 계산해 하한·상한. 데이터 14일 미만이면 "계획값 기반" 표시.
 - 예정 이동: 해당 날짜의 기준선을 예정 거리로 **대체**(이중 계산 금지).
-- 시나리오: 일일 거리 가감(예: 통근 +20km/일), 기간 지정 부재, 특정 이동 다른 차 처리.
+- 시나리오: 일일 거리 가감. 현재 화면 프리셋은 [통근 +20km/일]·[재택 −15km/일]. 기간 지정 부재·특정 이동 다른 차 처리는 엔진만 지원하고 v2 화면에는 없다.
+- 현재 화면 범위 라벨: "최근 4주 기준 61,660 km · 17만 / 계약 평균 기준 62,353 km · 24만"(김 대리). 계획이 있으면 "· 계획 반영".
+- 한계: 예측 기준선은 평일/주말 평균만 쓰고, 기어 기반 주행 패턴(요일별 평소 거리)은 반영하지 않는다. 내비 카드·이번 주 화면은 패턴을 쓰므로 홈 히어로 증가분과 반올림 수준 차이가 난다(FINAL_SPEC 8절).
 - 분해: 초과분을 평일 반복 / 주말 / 미분류 비중으로 나눔.
 
 ### 3.4 출구 (ExitCalculator, ExitCalendar)
@@ -127,7 +140,7 @@ Contract(입력·점진 질문) ─────────────┘
 
 ## 4. 데이터 모델 (로컬 JSON 저장)
 
-빌드 위험을 줄이려고 Room(KSP) 대신 **kotlinx.serialization JSON 파일 저장**(원자적 쓰기)으로 시작한다. 모델은 `domain/model/Models.kt`. 아래 구조는 저장 단위의 개념도다.
+빌드 위험을 줄이려고 Room(KSP) 대신 **kotlinx.serialization JSON 파일 저장**(원자적 쓰기)으로 구현했다(`data/JsonFileStore.kt`, 앱 내부 `files/namunkiro/*.json`, 인터넷 권한 없음·기기 내 저장). 모델은 `domain/model/Models.kt`. 아래 구조는 저장 단위의 개념도다. 실제로는 이 밖에 `trip_segments`(기어 기반 주행 구간), `scenarios`, 답한 질문, 거절한 내비 목적지, 개인/시연 백업(`personal_backup`, `demo_backup`)이 있다. 위치 좌표는 저장하지 않는다.
 - `contract`(id, type, startDate, endDate, totalKm, deductKm?, unitPrice, buyoutPrice?, deposit?, monthlyFee?, terminationTiers JSON?, freeReturnDate?, noticeDeadline?, startOdometer, startOdometerSource, confirmedFields JSON)
 - `odometer_sample`(id, rawKm, acceptedKm?, receivedAt, monoMs, sessionId, status: ACCEPTED/HELD/GAP, source)
 - `week_ledger`(weekStart, budgetKm, actualKm, carryInKm, splitDeductKm, closed)
@@ -139,28 +152,40 @@ Contract(입력·점진 질문) ─────────────┘
 
 ---
 
-## 5. 시연 설계 (PT 90초, 새 주간 목표 화면)
+## 5. 시연 설계 (PT 90초, v2 화면 · 2026-11-15 R-FINAL 리허설 기준)
 
-사전 준비: 김 대리 시드(2026-11-01~2030-10-31), DemoClock=2028-03-16 목요일, 경과501일, 사용21,382km·계기판21,394km로 맞춘다. 홈의 목표는 약282km/주, 이번 주186km 사용·약96km 남음이며 현재평균 만기 정산235,350원이다. 강릉 장면은 SDK 증가값을 받기 전에 촬영하여 수치를 고정한다. 이월·분할 버튼과244/58/232km 장면은 노출하지 않는다.
+실행 결과·지연·실패 지점: `docs/rehearsal/final/REPORT.md`, 단계별 캡처 `docs/rehearsal/final/01~11_*.png`, 수정 빌드 재캡처 `12~22_*.png`(REPORT 5절).
 
-| 시간 | 조작 | 새 화면 반응·발표 문장 | 실제/모의 |
-|---|---|---|---|
-| 0–10s | 온보딩3개 입력, 시작 계기판 자동 제안 | “계약 거리와 실제 주행으로 앞으로의 목표와 비용을 계산합니다.” 첫날은 기록 부족 안내, 확정0원처럼 설명하지 않음 | Odometer 실제, 계약 입력 |
-| 10–25s | 김 대리 홈 확인 | “초과0원 목표 주282km · 이번 주186km 탐 · 약96km 남음. 지금 평균 주299km가 이어지면 만기 약24만 원.” km→원 산식 확인 | 이력 모의, 계산 실제 |
-| 25–40s | 이번 주에 강릉 왕복420km 계획 추가 | “이 차로 가면 +3.9만 원 · 목표279km.” 주간 예상684km, 추가388km×100원=38,800원.279km는 계획 반영 미리보기라고 설명 | 입력·계산 실제, 이력 모의 |
-| 40–55s | VC 계기판 +12km | 목표·만기 비용 갱신과 관측 증가 확인. “줄일 수 있는 이동을 주10km 줄이면 만기 약13.7만 원 감소”는 증가 전960일 기준 가정이라고 구분 | 실제 SDK 수신 |
-| 55–65s | VC 기어 D | 주행 중 최소 잠금 화면. 이 에뮬레이터는 hmg_car_service가 없어 기어 D/R 기반 UXR 제한 확인 | 실제 기어·UXR |
-| 65–72s | VC 기어 P | 보던 화면 복원 | 실제 |
-| 72–82s | 이 과장499일 출구 화면 | “거리 초과 약31,431km×100원 → 반납 최소314만 원, 인수 순비용176만 원·준비할 돈1,926만 원.” 두 묶음 비교·월료와 대체 이동비 미확인 확인. 필요 시90일 장면에서 “주10km 감축이면 약19.6만 원 감소” 보조 설명 | 이력·견적 모의, 계산 실제 |
-| 82–90s | 앱 강제 종료, VC +50km, 앱 재실행 | 공백 구간50km 회수와 사용·목표·비용 재계산 | 실제 재시작 회수 |
+> 아래 표의 강릉역 KTX 수치(390 km · +346 km · +3.5만 원 · 281→279)는 1차 리허설(실제 순정 내비) 값이다. 이후 F2 수정으로 이번 주 화면도 카드와 같은 '평소 거리' 기준을 쓰므로, 수락 후 이번 주 화면의 목표·금액은 카드와 같게 나온다(가짜 내비 재캡처: 420 km · +376 km · 281→278 · +3.8만 원, 캡처 14·15).
 
-다른 차 버튼을 보여 줄 경우 “평소 주행 대비 추가3.9만 원”과 “이번420km 전체를 다른 차로 전환하면4.2만 원 감소”를 구분한다. 두 값이 같다고 말하지 않는다. 감축 탄력은 같은 기간·단가·감축 유지 가정이며 기존 초과액이0원이 되면 감소도 멈춘다. 통근·업무·돌봄을 반드시 줄여야 한다는 메시지는 쓰지 않는다.
+**사전 준비(시연 시간 밖, 약 1분)**
+1. 에뮬레이터 `-no-snapshot` cold boot 후 **두 번째 `am start`**까지 확인(부팅 직후·강제 종료 직후 첫 실행은 순정 내비가 앞에 나오는 경우가 있음).
+2. VC HTTP 하트비트 시작, VC 계기판을 **김 대리 시드 값 21,394km 이상**으로 맞춤(예: 21,394). 기어 P.
+3. `pm clear --user 10` → 앱 첫 화면 대기. 순정 내비의 최근 목적지에 '강릉역 KTX'를 한 번 등록해 두면 현장 한글 입력(약 10초)을 탭 1~2번으로 줄일 수 있다.
 
-예비 컷: 이 과장90일은 필요273/최근513km 목표 강요 대신 출구 비교와 감축 탄력, 정 주임은 정산0원·추천 연1만km, 보험은 구간 유지 페이스를 보여 준다. 이상값+580km 보류도 예비 컷으로 둔다. 최신 UI·시드 통합 상태에서 재촬영하며, 문서 변경 자체를 화면 구현·새 리허설 완료로 간주하지 않는다.
+| 시간 | 단계 | 조작 | 화면에서 보이는 것 · 발표 문장 | 실제/모의 | 리허설 실측 |
+|---|---|---|---|---|---|
+| 0–5s | 첫 실행 | 앱 실행 | 정체 1줄 + [예시로 둘러보기 · 김 대리 · 만기 약 24만 원] / [내 계약으로 시작] | — | 3.2s(01) |
+| 5–15s | 김 대리 홈 | [예시로 둘러보기] | "주 18 km 줄이면 0원", 막대(사용 21,382 → 만기 62,353, 약정 60,000), 초과 2,353km×100원, 이번 주 95km 남음 | 이력 모의, 계산 실제 | 3.9s(02) |
+| 15–20s | 실제 차량 연결 | ⚙ → [실제 차량] → 닫기 | 첫 실제 계기판 값으로 시드 자동 동기화(주행으로 더하지 않음) | 실제 SDK | 4.4s |
+| 20–30s | 실제 SDK +km | VC 계기판 +5km | 막대·목표가 움직이고 칩 "+5 km → +500원 · 관측" 4초 표시 | **실제 SDK** | 수신 0.1~1s, 칩까지 약 2.8s(03) |
+| 30–35s | 이번 주 + 반쪽 창 | [이번 주] 탭, 앱 오른쪽 핸들을 왼쪽으로 끌기 | 내비와 나란히. 요일 막대·0원 목표선 | 실제 화면 분할 | 3.5s(04) |
+| 35–50s | 순정 내비 목적지 | 내비에서 '강릉역 KTX' 선택 → 경로 미리보기 5초 뒤 자동 안내 시작 | 앱에 바로 제안 카드: "금요일 강릉역 KTX · 왕복 390 km · 평소보다 +346 km · 0원 목표 281→278 · +3.5만 원" | **실제 NaviHelper** | 이벤트→카드 약 0.01s, 목적지 선택~카드 약 6s(05) |
+| 50–55s | 제안 수락 | [이번 주 계획에 넣기] | 제목 "강릉역 KTX 왕복 다녀오면, 이렇게 조정돼요", 281→279, 이번 주 650km, 금요일 막대 +3.4만 | 계획은 입력, 계산 실제 | 2.5s(06) |
+| 55–58s | 안내 종료 | 내비 [안내 종료] | 제안이 다시 생기지 않음(로그 0건) | 실제 | 3s(07) |
+| 58–65s | 주행 잠금 | 반쪽 창 복원 → VC 기어 D → P | "주행 중에는 화면을 쉬어 갑니다" → 보던 이번 주 화면 복원 | **실제 기어·UXR** | 잠금 1.2s 이내(08), 복원 1.5s 이내(09) |
+| 65–78s | 공백 회수 | `am force-stop` → VC +50 → 앱 재실행 | 배너 "앱이 꺼져 있던 동안 달린 50.0 km를 회수했어요 [관측·공백]" + 칩 +50 km → +5,000원 | **실제 SDK** | 재실행~화면 약 8.5s(10) |
+| 78–90s | 이 과장 출구 | ⚙ → [이 과장 · 1년 4개월 차 출구] → [출구 비교 →] | 만기까지 최저 인수 후 보유 176만 / 반납 최소 314만+ / 지금 나가면 승계 최소 300만+ · 해지 최소 779만+ | 이력·견적 모의, 계산 실제 | 약 8s(11) |
 
----
+**순서 메모**: 공백 회수를 출구보다 먼저 한다. 인물 전환(이 과장)은 모의 차량으로 바뀌므로, 실제 SDK 공백 회수는 김 대리(실제 차량) 상태에서 해야 한다. 재시작 후에도 시연 중 고른 '실제 차량'이 유지된다.
+
+**발표 원칙**: 시드·DemoClock은 [모의] 배지로 보이고, 실제 SDK 장면(+km 칩, 내비 제안, 기어 잠금, 공백 회수)을 반드시 포함한다. 이월·분할(244/58/232km)은 쓰지 않는다. 주 10km 감축 탄력·강릉 비용은 같은 기간·단가 가정의 계산임을 구분한다.
+
+**예비 컷**: 이 과장 90일(회복 어려움, 471만 원), 정 주임(만기에 남는 거리·다음 계약 연 1만 km), 박 과장(보험 구간), 이상값 +580km 보류, 내비 미설치 시 데모 패널 '강릉 경포대 편도 210 km'(가짜 내비, [모의]).
 
 ## 6. 작업 분해와 병렬 계획
+
+> 상태(2026-11-15): P0·D1·E1·V1·U1·I1 완료(화면은 v2로 재디자인), R1은 README·release APK 정리 단계. 아래 표는 당시 계획 기록이다.
 
 | ID | 작업 | 담당 | 선행 | 완료 기준 |
 |---|---|---|---|---|
@@ -180,13 +205,15 @@ Contract(입력·점진 질문) ─────────────┘
 ---
 
 ## 7. 테스트
+- 현재: `:app:testDebugUnitTest` **74개, 실패 0**(도메인 엔진, 거리 수집기, 차량·데모·저장소, 심사관 엣지케이스 `app/JudgeEdgeCasesTest`). 에뮬레이터 체크리스트는 `docs/rehearsal/final/REPORT.md`에서 전부 통과.
 - 단위 테스트(E1): 287 / 244 / −807 / 약 24만 원 / 684 / 8주 232 / 3,696·−2,904·273·513·회복 어려움·471만 원 / 314만·176만(현금 1,926만)·300만 / 보험 192·1,180·245.
 - 수집 테스트(V1): 정상 증가, 역행 보류, 급증 보류, 공백 회수, 재구독 중복 방지, capability 미지원 시 상태 표시.
 - 에뮬레이터 체크리스트(I1): VC 주행거리 반영 지연, 기어 P/D, driving_regulation on/off 시 잠금·복원, 강제 종료 후 재실행 회수, 반쪽 창 레이아웃.
 
 ## 8. 리스크
 - 에뮬레이터 자원 부족으로 멈춤 → 영상 백업, 시연 장비 별도.
-- NaviHelper 실수신 실패 → 수동 예정 이동으로 시연(이미 기본 경로).
-- 시드·DemoClock이 "조작"으로 보일 위험 → [모의] 배지와 시연 중 구두 설명, 실제 SDK 수신 장면(+12km, 기어, 재시작 회수)을 반드시 포함.
+- NaviHelper: 실수신 확인 완료(반쪽 창 실시간). 현장에서 내비가 앱을 가리면 이벤트가 늦게 오므로 반쪽 창으로 시연, 실패 시 데모 패널 가짜 내비·수동 예정 이동.
+- 시드·DemoClock이 "조작"으로 보일 위험 → [모의] 배지와 시연 중 구두 설명, 실제 SDK 수신 장면(+5km 칩, 내비 제안, 기어 잠금, 재시작 회수)을 반드시 포함.
+- 히어로 금액이 +km 칩보다 크게 움직이는 외삽 현상 → 질문이 나오면 '칩 = 방금 달린 km의 한계 비용, 히어로 = 계약 평균 페이스 외삽'으로 설명(FINAL_SPEC 8절).
 - 설치율·MAU 등 사업 수치는 추정 → PT에서 산정 방식 함께 제시.
 

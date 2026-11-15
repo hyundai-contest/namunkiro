@@ -278,6 +278,8 @@ Go 1.22+, host-display-bridge 실행(`go run . --avd "<AVD 이름>"`), 에뮬레
 
 ## 7. 개발 중인 앱: 대리 바통 (메인 출품작)
 
+> **2026-11-15 메모**: 이 절은 초기 아이디어(대리 바통) 기록이다. 최종 출품작은 **남은키로**이며, 현재 구현 명세는 `docs/FINAL_SPEC.md`, 시연 대본은 `docs/DEV_PLAN.md` 5절을 따른다.
+
 ### 한 줄
 저녁에 차를 세우는 맑은 순간에 "오늘 대리로 귀가"를 미리 맡겨 두면, 밤에 대리기사가 운전석에 앉는 순간 차가 **이 차의 지금 상태와 차주 요청을 한 장의 카드로** 건네고, 주차(P) 때 층을 1탭으로 받아 두었다가, 다음 날 아침 **밤사이 바뀐 것만 보여 주고 1탭으로 되돌리는** 대리운전 인계 앱.
 
@@ -394,19 +396,38 @@ Go 1.22+, host-display-bridge 실행(`go run . --avd "<AVD 이름>"`), 에뮬레
     - **백그라운드에서는 콜백이 오지 않는다**: 앱이 화면 뒤로 가면(cached app freezer) 리스너가 멈추고, 앞으로 가져오면 밀린 값이 한꺼번에 들어옴. 백그라운드 수집에 의존하지 말 것(세션 시작 재조회 + 공백 회수 설계가 맞음).
     - **앱은 사용자 10으로 실행**: `pm clear`·`am start`·`am force-stop`에 `--user 10`을 붙여야 한다(안 붙이면 사용자 0에 적용돼 데이터가 남음).
     - 에뮬레이터 시계는 PST(로그 11-14 19:xx = KST 11-15 12:xx). 날짜 경계 테스트 시 주의(앱 계산은 AppClock/DemoClock 기준).
+- 2026-11-15 N1 NaviHelper·주행 단위 실측(AVD `Pleos_Connect_v2.1.0`, 앱 `PleosNaviGateway`, NaviHelper 3.0.5 / 내비 서비스 `ai.pleos.playground.service.navi` 3.0.4, 순정 내비 `ai.umos.maps.android.navigation.app`)
+    - **연결**: `initialize(onConnected, onFailed)` → 약 0.24초 만에 `onServiceConnected`, `getServiceVersion = 3.0.4`, `registerCallbackV3`. 권한 `pleos.car.permission.NAVI_ROUTE`(Normal) 선언만으로 `getDestinationInfo`·`getRouteStateInfo` 동작. `<queries>`는 AAR 매니페스트가 넣어 줌.
+    - **목적지 없음 형식**: `DestinationInfo(latitude=0.0, longitude=0.0, name="", address="", remainDistance=0, remainTime=0, poiId="")`, `RouteStateInfo(naviMode=SAFE_GUIDING, isRouting=false)`. → 빈 이름+0m를 '목적지 없음'으로 처리.
+    - **목적지 설정 방법(에뮬레이터)**: `geo:` NAVIGATE 인텐트는 무시됨. 순정 내비 검색창에 `adb shell input text "seoul"`(영문) 입력 → 결과의 경로 화살표 탭 → 경로 미리보기 후 **자동으로 안내 시작**. 지도 타일은 비어 있지만 검색·경로 계산은 동작(현재 위치 '수정구 시흥동').
+    - **안내 시작 시 오는 이벤트(순서)**: `onRouteStarted(RouteStartInfo(duration=3840, distance=23000, tollFare=700, name=더현대서울))` → (deprecated) `onRouteEnded`가 **곧바로 함께 옴**(종료 의미 아님, 무시해야 함) → `onNavigationStatus(ROUTE_DRIVE)` → `onDrivingInfo(destination=DrivingState(name=더현대서울, duration=3840, distance=23000))` → `onRouteStateInfo(naviMode=ROUTE_GUIDING, isRouting=false)` → `getDestinationInfo` 응답 `DestinationInfo(latitude=37.526…, longitude=126.927…, name=더현대서울, address=영등포구 여의도동, remainDistance=23000, remainTime=3840, poiId=…)`. 단위는 문서대로 m·초.
+    - **주의: 안내 중에도 `RouteStateInfo.isRouting=false`**. 안내 여부는 `naviMode`(ROUTE_GUIDING / SAFE_GUIDING)나 `onNavigationStatus`(ROUTE_DRIVE / FREE_DRIVE)로 판단할 것.
+    - **안내 종료(‘안내 종료’ 버튼)**: `onDrivingInfo(distance=0, duration=0)` 1회 → `onRouteCancelled` → `onNavigationStatus(FREE_DRIVE)` → 빈 `DestinationInfo` → `RouteStateInfo(naviMode=SAFE_GUIDING)`. `onRoutingCompleted`·`onDestinationArrived`는 이번에 관측 안 됨(실제 이동 없음).
+    - **백그라운드 동안의 이벤트**: 내비가 앱 영역을 차지해 우리 앱이 뒤로 가면 프로세스가 얼어 콜백이 오지 않는다. **앞으로 가져오면 밀린 이벤트가 순서대로 한꺼번에 들어온다**(22:55:21 시작 → 앱 복귀 22:55:37에 수신). 따라서 "목적지 설정 → 앱 열기"로 제안이 뜨는 흐름은 성립. 반쪽 창(내비와 나란히)이면 실시간 수신 가능할 것으로 보이나 이번에는 미측정.
+    - 차량 이동 시뮬레이션(위치 이동)으로 `onDrivingInfo` 남은 거리 감소·`onDestinationArrived` 수신은 **미확인**(VC로 GPS 이동 불가).
+    - **기어 기반 주행 단위(TripSegmenter)**: 실제 SDK 모드에서 VC 기어 P→D, 계기판 20,012.1→20,013.6km(1.2초마다 +0.06km, 250km/h 규칙 안), 기어 P → `trip_segments.json`에 `{start 23:01:23, end 23:02:02, km 1.5, source OBSERVED}` 저장 확인. VC로 +12km를 한 번에 올리면 실사용 규칙(데모 여유분 없음)에서는 급증 보류라 그 주행은 0km로 버려진다 → 실 SDK 시연은 작은 단계로 올리거나 데모 규칙을 쓸 것.
+    - VC 계기판 API 응답에 VHAL 속성 `TRIP_DRIVING_DISTANCE`(0x21610451)·`TRIP_DRIVING_TIME`도 함께 표시됨(앱에서는 미사용).
+- 2026-11-15 R-FINAL 재실측(수정 후 APK): **반쪽 창(앱 오른쪽 핸들을 왼쪽으로 끌어 내비와 나란히)에서는 앱이 보이는 상태라 NaviHelper 이벤트가 실시간으로 온다**(onRouteStarted→제안 6ms). 내비 검색은 화면 한글 자모 키를 좌표로 눌러 '강릉' 입력 가능. 경로 선택 후 '안내 시작' 5초 카운트다운 뒤 자동 시작. 부팅 직후·`am force-stop` 직후 첫 `am start`는 순정 내비가 앞에 남는 경우가 있어 한 번 더 실행해야 함. 자세한 결과: `docs/rehearsal/final/REPORT.md`.
 
-### 미확인
-- [ ] 이 PC(Iris Xe)에서 Pleos 에뮬레이터 부팅·성능
-- [ ] `CarPropertyManager` GEAR_SELECTION / PERF_VEHICLE_SPEED 권한·값이 에뮬레이터에서 읽히는지
-- [ ] Seat 위치(get) 값과 Virtual Console 재현 여부, selectSeatMemory/move 동작
-- [ ] Seat Occupancy 콜백이 좌석별로 정상 수신되는지
-- [ ] 시동 직후 앱 자동 기동 여부, 시동 OFF/ACC 이후 앱 동작
-- [ ] NaviHelper 즐겨찾기 조회·requestRoute가 에뮬레이터 순정 내비에서 동작하는지, 이벤트 수신 여부
-- [ ] TTS ON_DEVICE 한국어 동작, 오디오 존(좌석별 스피커) 지정 가능 여부
-- [ ] DrivingMode 주행모드 값과 VC 재현
-- [ ] 외부등 "AUTO" 모드를 Light API로 읽고 쓸 수 있는지
-- [ ] FusedLocation isSupported / 에뮬레이터 위치 주입으로 proximityAlert 동작
-- [ ] 문서 충돌: Vehicle 제어·TTS·STT·FusedLocation "준비 중" 표기 vs 설명회 "권한 선언만으로 사용 가능"
+### 미확인 → 체크리스트 (2026-11-15 개발 완료 시점 갱신)
+
+범례: [x] 확인 · [~] 일부 확인 · [ ] 미확인 · [-] 남은키로에서 사용하지 않아 확인 대상 아님
+
+- [x] 이 PC(Iris Xe)에서 Pleos 에뮬레이터 부팅·성능 → 11-07 부팅 확인. `-no-snapshot` cold boot 약 45~100초, RAM 부족 시 멈춤 주의(위 기록)
+- [x] Vehicle SDK Odometer capability/get/register, VC 주행거리 변경 반영(0.1~1초) → 11-15 V1
+- [x] Vehicle SDK 기어 get/register, VC 기어 P/D/R/N 반영(0.1~0.2초) → 11-15 V1
+- [x] CarUxRestrictions: VC 기어 D·R만으로 주행 최적화 요구, P에서 해제. `hmg_car_service` 없음 → 11-15 V1, R-FINAL 잠금 1.2초·복원 1.5초
+- [x] 앱 강제 종료 → VC 증가 → 재실행 공백 회수 → 11-15 V1, R-FINAL(50.0 km 배너)
+- [x] 기어 기반 주행 구간(P→D→P) 저장 → 11-15 N1
+- [x] NaviHelper 이벤트 수신·목적지 조회(`onRouteStarted`, `getDestinationInfo`, 안내 종료 순서), 반쪽 창 실시간 수신 → 11-15 N1, R-FINAL
+- [~] NaviHelper 즐겨찾기 조회·`requestRoute` → 미확인(남은키로 미사용)
+- [ ] `onDestinationArrived`·남은 거리 감소 → VC로 위치 이동 불가해 미확인
+- [ ] 시동 직후 앱 자동 기동 여부, 시동 OFF/ACC 이후 앱 동작 → VC 재현 불가. 앱은 시동 이벤트에 의존하지 않음(세션 재조회 + 공백 회수)
+- [ ] 실차에서 Odometer 갱신 주기·정밀도 → 실차 없음
+- [-] `CarPropertyManager` GEAR_SELECTION / PERF_VEHICLE_SPEED → Vehicle SDK Gear로 대체, 차속은 VC 재현 불가
+- [-] Seat 위치·Seat Occupancy, DrivingMode, 외부등 Light API → 이전 아이디어용 항목
+- [-] TTS ON_DEVICE 한국어·오디오 존, FusedLocation → 남은키로 미사용
+- [~] 문서 충돌: Vehicle 제어·TTS·STT·FusedLocation "준비 중" 표기 vs 설명회 "권한 선언만으로 사용 가능" → 남은키로가 쓰는 Vehicle 읽기(CAR_DRIVE)·NaviHelper(NAVI_ROUTE)는 권한 선언만으로 동작 확인. 제어(set) API는 사용하지 않음
 
 ---
 
