@@ -47,8 +47,7 @@ private val Presets = listOf(
     }
 
     // 범위 양 끝의 가정 이름: 계약 평균(홈 히어로와 같은 값)에 가까운 쪽 vs 최근 4주 습관.
-    val average = s.projectedEndKm
-    val recent = if (kotlin.math.abs(highKm - average) >= kotlin.math.abs(lowKm - average)) highKm else lowKm
+    val (average, recent) = forecastAssumptionKm(f, s)
 
     V2Title("습관이 바뀌면, 범위도 바뀌어요")
     V2Panel {
@@ -63,10 +62,10 @@ private val Presets = listOf(
             color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         prevRange?.takeIf { it != range }?.let { V2Caption("$it → $range", color = MaterialTheme.colorScheme.onSurface) }
-        RangeBand(s, c, f)
+        RangeBand(s, c, f, usedSourceLabel = if (state.isSimulated()) "모의" else "관측")
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            V2Caption("최근 4주 습관 ${km(recent)} · ${v2Money(CostModel.distanceFee(recent, c))}")
-            V2Caption("계약 평균 ${km(average)} · ${v2Money(CostModel.heroFee(s, c))}")
+            V2Caption("${forecastBasisLabel(state, "최근 4주")} ${km(recent)} · ${v2Money(CostModel.distanceFee(recent, c))}")
+            V2Caption("${forecastBasisLabel(state, "계약 평균")} ${km(average)} · ${v2Money(CostModel.distanceFee(average, c))}")
         }
         TripPatternLine(state, onWhy)
     }

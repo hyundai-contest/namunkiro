@@ -22,9 +22,10 @@ import com.namunkiro.ui.v2.components.*
 import kotlinx.coroutines.delay
 
 /** 홈의 상태 3종(+기록 초기). 슬라이더 미리보기와 무관하게 '현재' 값으로만 판정한다. */
-enum class HomeMode { EARLY, OVER, HARD, SPARE, ON_TRACK }
+enum class HomeMode { EARLY, OVER, HARD, SPARE, ON_TRACK, ENDED }
 
 fun homeMode(s: BudgetSnapshot, c: Contract): HomeMode {
+    if (s.today.isAfter(c.endDate)) return HomeMode.ENDED
     if (s.elapsedDays < 7) return HomeMode.EARLY
     val zero = CostModel.zeroFeePace(s, c)
     val fee = CostModel.heroFee(s, c)
@@ -37,11 +38,22 @@ fun homeMode(s: BudgetSnapshot, c: Contract): HomeMode {
 }
 
 @Composable fun HomeScreenV2(state: AppUiState, actions: AppActions, onWhy: () -> Unit = {}) {
-    val s = state.budget; val c = state.contract
+    val s = averageDisplaySnapshot(state); val c = state.contract
     if (s == null || c == null) { V2Caption("주행·계약 정보를 확인하고 있어요"); return }
     val mode = homeMode(s, c)
+    if (mode == HomeMode.ENDED) {
+        V2Panel(gap = 8.dp, padding = 20.dp) {
+            V2Title("계약 만기가 지났어요")
+            V2Caption("계약 기간 사용 ${km(s.usedKm)} · 거리 정산 참고액")
+            V2Money(CostModel.distanceFee(s.usedKm, c))
+            V2Caption("최종 청구액은 계약 조건과 반납 정산을 확인해 주세요.")
+            V2Button("계약 확인", { actions.navigate(Screen.CONTRACT) }, primary = true)
+            V2Button("왜?", onWhy)
+        }
+        return
+    }
     // 슬라이더 미리보기(저장 안 함). 잠금·탭 이동·회전 후 복원. 계약이 바뀌면 초기화.
-    var pace by rememberSaveable(c.startDate.toString(), c.totalKm, c.startOdometerKm) { mutableStateOf<Double?>(null) }
+    var pace by rememberSaveable(c, state.trips, state.scenarios) { mutableStateOf<Double?>(null) }
     val zero = CostModel.zeroFeePace(s, c)
     val cut = CostModel.weeklyCutToZero(s, c)
     val allowance = CostModel.allowanceKm(c)
@@ -74,17 +86,18 @@ fun homeMode(s: BudgetSnapshot, c: Contract): HomeMode {
         HomeMode.HARD -> "거리 조정이 어렵다면, 출구 비교"
         HomeMode.OVER -> if (cut != null && cut > 0) "주 ${number(cut)} km 줄이면 0원" else "지금 페이스면 초과 0원"
         HomeMode.ON_TRACK -> "지금 페이스면 초과 0원"
+        HomeMode.ENDED -> "계약 만기가 지났어요"
     }
     V2Title(title)
     NaviSuggestionCard(state, actions)
-    V2Panel {
+    V2Panel(gap = 8.dp, padding = 20.dp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             V2Caption(
                 when {
                     mode == HomeMode.EARLY -> "주행 7일 뒤부터 만기 정산을 예측해요"
                     pace != null -> "주 ${number(pace!!)} km 가정 · 미리보기"
-                    mode == HomeMode.SPARE -> "만기까지 남을 거리 · 계약 평균 기준"
-                    else -> "이대로면 만기 거리 정산 · 계약 평균 기준"
+                    mode == HomeMode.SPARE -> "만기까지 남을 거리 · ${forecastBasisLabel(state, "계약 평균")}"
+                    else -> "이대로면 만기 거리 정산 · ${forecastBasisLabel(state, "계약 평균")}"
                 },
                 Modifier.weight(1f),
             )
@@ -100,13 +113,13 @@ fun homeMode(s: BudgetSnapshot, c: Contract): HomeMode {
             V2Caption("만기 거리 정산 0원")
         } else V2Money(fee)
         Spacer(Modifier.height(4.dp))
-        DistanceBar(s, c, endKm = endKm, usedKm = base.usedKm)
+        DistanceBar(s, c, endKm = endKm, usedKm = base.usedKm, usedSourceLabel = if (state.isSimulated()) "모의" else "관측")
         marginal?.let { V2Chip(it) }
     }
     if (mode == HomeMode.EARLY) return
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         V2Columns(v2Compact(maxWidth), left = {
-            V2Panel {
+            V2Panel(gap = 8.dp, padding = 20.dp) {
                 when {
                     mode == HomeMode.HARD -> {
                         Text("만기 이후 선택", style = MaterialTheme.typography.titleLarge)
@@ -114,12 +127,14 @@ fun homeMode(s: BudgetSnapshot, c: Contract): HomeMode {
                         V2Button("출구 비교 →", { actions.navigate(Screen.EXIT) }, primary = true)
                     }
                     zero != null && zero > 0 -> {
+                        // 예정 이동을 넣었으면 이번 주 화면과 같은 '계획 반영' 목표를 보여 준다.
+                        val target = plannedZeroFeePace(state)?.takeIf { it > 0 } ?: zero
                         Text(if (mode == HomeMode.SPARE) "초과 0원 목표" else "이번 주 목표", style = MaterialTheme.typography.titleLarge)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                            MiniRing(zero.toDouble(), s.thisWeek.usedKm)
+                            MiniRing(target.toDouble(), s.thisWeek.usedKm)
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("주 ${km(zero)}", fontSize = 34.sp, style = V2Numeric)
-                                V2Caption("이번 주 ${km(s.thisWeek.usedKm)} 사용")
+                                Text("주 ${km(target)}", fontSize = 34.sp, style = V2Numeric)
+                                V2Caption(if (target != zero) "계획 반영 · 이번 주 ${km(s.thisWeek.usedKm)} 사용" else "이번 주 ${km(s.thisWeek.usedKm)} 사용")
                             }
                         }
                     }
@@ -127,7 +142,7 @@ fun homeMode(s: BudgetSnapshot, c: Contract): HomeMode {
                 }
             }
         }, right = {
-            V2Panel {
+            V2Panel(gap = 8.dp, padding = 20.dp) {
                 if (mode == HomeMode.SPARE) {
                     Text("다음 계약", style = MaterialTheme.typography.titleLarge)
                     val annual = s.annualPaceKm

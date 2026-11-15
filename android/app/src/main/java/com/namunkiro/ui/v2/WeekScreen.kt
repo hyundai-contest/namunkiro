@@ -29,9 +29,12 @@ private val DayNames = listOf("월", "화", "수", "목", "금", "토", "일")
 private fun usualKm(f: ForecastResult, date: LocalDate, pattern: com.namunkiro.domain.TripPattern?) =
     pattern?.usualKmByDay?.get(date.dayOfWeek) ?: if (date.dayOfWeek.value >= 6) f.weekendAvgKm else f.weekdayAvgKm
 
-/** 평소 대비 추가 km. 엔진 tripImpacts의 km를 우선 쓰고, 금액은 항상 CostModel로 계산한다. */
+/**
+ * 평소 대비 추가 km. 내비 제안 카드(usualKmFor)와 같은 기준(관측 패턴 요일값 → 없으면 예측 평균)으로 계산해
+ * 수락 전 카드와 수락 후 이번 주 화면의 금액·'매주 N km'가 같게 한다. 금액은 항상 CostModel.
+ */
 private fun extraKm(f: ForecastResult, trip: PlannedTrip, pattern: com.namunkiro.domain.TripPattern? = null): Double =
-    f.tripImpacts.firstOrNull { it.tripId == trip.id }?.extraKm ?: (trip.km - usualKm(f, trip.date, pattern)).coerceAtLeast(0.0)
+    if (trip.otherCar) 0.0 else (trip.km - usualKm(f, trip.date, pattern)).coerceAtLeast(0.0)
 
 /** 긴 이동 판정: 예정 거리 ≥ 그날 평소 × 2 또는 평소보다 +100km 이상. */
 fun isLongTrip(f: ForecastResult, trip: PlannedTrip, pattern: com.namunkiro.domain.TripPattern? = null): Boolean {
@@ -42,6 +45,15 @@ fun isLongTrip(f: ForecastResult, trip: PlannedTrip, pattern: com.namunkiro.doma
 /** 추가 km를 남은 기간에 흡수할 때의 0원 목표 페이스. */
 private fun zeroAfter(s: BudgetSnapshot, c: com.namunkiro.domain.model.Contract, extra: Double) =
     CostModel.zeroFeePace(s.copy(usedKm = s.usedKm + extra), c)
+
+/** 예정 이동(이 차·오늘 이후)의 추가 km를 흡수한 0원 목표 페이스. 홈 링과 이번 주 화면이 같은 값을 쓴다. 예정 없으면 기본 목표. */
+fun plannedZeroFeePace(state: AppUiState): Int? {
+    val s = state.budget ?: return null; val c = state.contract ?: return null
+    val f = state.forecast ?: return CostModel.zeroFeePace(s, c)
+    val extra = state.trips.filter { !it.otherCar && !it.date.isBefore(s.today) && !it.date.isAfter(c.endDate) }
+        .sumOf { extraKm(f, it, state.tripPattern) }
+    return zeroAfter(s, c, extra)
+}
 
 @Composable fun WeekScreenV2(state: AppUiState, actions: AppActions, onWhy: () -> Unit = {}) {
     val s = state.budget; val c = state.contract; val f = state.forecast
@@ -99,7 +111,7 @@ private fun zeroAfter(s: BudgetSnapshot, c: com.namunkiro.domain.model.Contract,
         val after = zeroAfter(s, c, extra)
         val impact = CostModel.marginalFee(s, c, extra)
         V2Panel {
-            V2Caption("평소보다 긴 이동")
+            V2Caption("평소보다 긴 이동 · " + if (trip.source == com.namunkiro.core.result.Source.OBSERVED) "[내비 등록·예정]" else "[예정]")
             Text(
                 "${DayNames[trip.date.dayOfWeek.value - 1]}요일 ${trip.label} ${km(trip.km)} · 평소보다 +${km(extra)}",
                 style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
@@ -137,9 +149,9 @@ private fun zeroAfter(s: BudgetSnapshot, c: com.namunkiro.domain.model.Contract,
     V2Button("예정 이동 추가", { open = true })
     if (!open) return
     val today = state.budget?.today ?: state.contract?.startDate ?: return
-    var label by rememberSaveable { mutableStateOf("") }
-    var distance by rememberSaveable { mutableStateOf("") }
-    var picked by rememberSaveable { mutableStateOf(today.toString()) }
+    var label by rememberSaveable { mutableStateOf(if (state.demoMode) com.namunkiro.demo.PersonaSeeds.DEMO_NAVI_DESTINATION else "") }
+    var distance by rememberSaveable { mutableStateOf(if (state.demoMode) "420" else "") }
+    var picked by rememberSaveable { mutableStateOf((if (state.demoMode) today.with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SATURDAY)) else today).toString()) }
     var calendar by rememberSaveable { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = { open = false }) {
         Column(Modifier.fillMaxWidth().imePadding().padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -154,14 +166,7 @@ private fun zeroAfter(s: BudgetSnapshot, c: com.namunkiro.domain.model.Contract,
             Spacer(Modifier.height(20.dp))
         }
     }
-    if (calendar) {
-        val picker = rememberDatePickerState(initialSelectedDateMillis = LocalDate.parse(picked).toEpochDay() * 86_400_000)
-        DatePickerDialog(
-            onDismissRequest = { calendar = false },
-            confirmButton = { V2Button("날짜 선택", { picker.selectedDateMillis?.let { picked = LocalDate.ofEpochDay(it / 86_400_000).toString() }; calendar = false }) },
-            dismissButton = { V2Button("취소", { calendar = false }) },
-        ) { DatePicker(picker) }
-    }
+    if (calendar) V2DatePicker(LocalDate.parse(picked), { calendar = false }, { picked = it.toString() }, minimum = today)
 }
 
 @Preview(name = "V2 이번 주 · 긴 이동", widthDp = 1682, heightDp = 1400)

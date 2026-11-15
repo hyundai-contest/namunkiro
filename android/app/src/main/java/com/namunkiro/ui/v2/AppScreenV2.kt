@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -26,6 +27,8 @@ import com.namunkiro.ui.v2.components.LocalActiveChartHint
 import com.namunkiro.ui.v2.components.LocalChartDismissKey
 
 private val Tabs = listOf(Screen.HOME to "홈", Screen.WEEK to "이번 주", Screen.FORECAST to "예측", Screen.EXIT to "출구", Screen.CONTRACT to "계약")
+/** 시연 설정도 앱 테마 안의 헤더 버튼으로 연다. */
+val LocalDemoSettings = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /**
  * v2 앱 최상위. 화면은 [AppUiState]만 읽고 동작은 [AppActions]로만 보낸다.
@@ -36,7 +39,8 @@ private val Tabs = listOf(Screen.HOME to "홈", Screen.WEEK to "이번 주", Scr
 @Composable fun NamunkiroAppV2(state: AppUiState, actions: AppActions) {
     NamunkiroTheme {
         V2MotionPolicy(state.gate) {
-            val pages = rememberSaveableStateHolder()
+            // 인물·데이터 모드 전환 시 모든 탭의 스크롤·미리보기를 초기화한다.
+            val pages = key(state.demoMode, state.demoPersonaName) { rememberSaveableStateHolder() }
             var why by rememberSaveable { mutableStateOf<String?>(null) }
             val hint = rememberSaveable { mutableStateOf<String?>(null) }
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -52,6 +56,13 @@ private val Tabs = listOf(Screen.HOME to "홈", Screen.WEEK to "이번 주", Scr
                             verticalArrangement = Arrangement.spacedBy(20.dp),
                         ) {
                             V2Header(state, actions)
+                            // 상단 배너 1줄: 공백 거리 회수·출구 달력 D-14(R-FINAL: v2에서 누락돼 최소 추가, UX 검토 대상)
+                            if (state.gate == Gate.NORMAL && state.contract != null) state.banner?.let { b ->
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Text(b, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                                    V2Button("닫기", actions::dismissBanner)
+                                }
+                            }
                             if (state.gate == Gate.NORMAL && state.contract != null) V2Tabs(state.screen, actions)
                             val route = when {
                                 state.gate == Gate.ANOMALY_HOLD -> "hold"
@@ -86,7 +97,7 @@ private val Tabs = listOf(Screen.HOME to "홈", Screen.WEEK to "이번 주", Scr
                             why?.let { WhySheetV2(state, actions, topic = it, onDismiss = { why = null }) }
                             val q = state.deferredQuestion
                             // 공제 질문은 기록 7일 뒤(필요한 화면에서 1개만). 나머지는 바로.
-                            if (why == null && q != null && (q.kind != DeferredQuestionKind.DEDUCT_KM || (state.budget?.elapsedDays ?: 0) >= 7)) {
+                            if (why == null && q != null && (state.screen == Screen.CONTRACT || q.kind != DeferredQuestionKind.DEDUCT_KM || (state.budget?.elapsedDays ?: 0) >= 7)) {
                                 DeferredQuestionSheetV2(state, actions)
                             }
                         }
@@ -99,12 +110,30 @@ private val Tabs = listOf(Screen.HOME to "홈", Screen.WEEK to "이번 주", Scr
 
 /** 헤더: 앱 이름 · 정차 상태 · [모의] · 시연 칩. */
 @Composable private fun V2Header(state: AppUiState, actions: AppActions) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("남은키로", style = MaterialTheme.typography.titleLarge)
-        V2Caption(if (state.gate == Gate.ANOMALY_HOLD) "● 정차 중 · 값 확인 중" else "● 정차 중", Modifier.weight(1f), color = v2Colors().spare)
-        if (state.isSimulated()) V2SimTag()
-        DemoChip(state, actions)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("남은키로", style = MaterialTheme.typography.titleLarge)
+            V2Caption(if (state.gate == Gate.ANOMALY_HOLD) "● 정차 중 · 값 확인 중" else if (state.vehicleConnection == VehicleConnectionStatus.READY || state.demoMode) "● 정차 중" else "차량 연결 확인", Modifier.weight(1f), color = v2Colors().spare)
+            if (state.isSimulated() && !state.demoMode) V2SimTag()
+            if (LocalV2Compact.current != true) DemoChip(state, actions)
+            if (state.demoMode) LocalDemoSettings.current?.let { open -> V2Button("⚙", open, Modifier.semantics { contentDescription = "시연 설정" }) }
+            if (!state.demoMode && state.contract != null) V2Button("예시 [모의]", actions::enterDemo)
+        }
+        // 반쪽 창에서는 시연 칩에 한 줄 전체를 주어 이름과 복귀 행동을 보존한다.
+        if (LocalV2Compact.current == true) DemoChip(state, actions)
+        if (!state.demoMode && state.vehicleConnection != VehicleConnectionStatus.READY) {
+            V2Caption(vehicleConnectionLabel(state.vehicleConnection))
+            V2Button("차량 신호 다시 확인", actions::retryOdometer)
+        }
     }
+}
+
+fun vehicleConnectionLabel(status: VehicleConnectionStatus): String = when (status) {
+    VehicleConnectionStatus.WAITING -> "기어·주행 제한 신호를 기다리는 중"
+    VehicleConnectionStatus.TIMED_OUT -> "차량 신호를 받지 못했어요 · 연결 확인 후 다시 시도해 주세요"
+    VehicleConnectionStatus.NOT_SUPPORTED -> "지원하지 않는 차량 신호가 있어요 · 계약과 예시를 둘러볼 수 있어요"
+    VehicleConnectionStatus.ERROR -> "차량 연결을 확인해 주세요 · 다시 시도할 수 있어요"
+    VehicleConnectionStatus.READY -> "차량 신호 연결됨"
 }
 
 /** 탭 5개(76dp 이상). 반쪽 창에서는 가로 스크롤. */

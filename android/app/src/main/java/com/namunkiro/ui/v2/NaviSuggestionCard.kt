@@ -16,11 +16,6 @@ import com.namunkiro.ui.state.*
 import com.namunkiro.ui.theme.NamunkiroTheme
 import java.time.LocalDate
 
-private fun sourceTag(s: Source) = when (s) {
-    Source.OBSERVED -> "[관측]"; Source.INPUT -> "[입력]"; Source.ESTIMATED -> "[추정]"
-    Source.UNCONFIRMED -> "[미확인]"; Source.SIMULATED -> "[모의]"
-}
-
 /** 그날 평소 거리: 관측 주행 패턴이 있으면 그 값, 없으면 예측 엔진의 평일/주말 평균. */
 fun usualKmFor(state: AppUiState, date: LocalDate): Double? =
     state.tripPattern?.usualKmByDay?.get(date.dayOfWeek)
@@ -38,13 +33,13 @@ fun usualKmFor(state: AppUiState, date: LocalDate): Double? =
             V2Caption("내비 목적지 · ${v2Date(n.date)}", Modifier.weight(1f))
         }
         Text(
-            "${n.destinationName} · 왕복 ${km(n.roundTripKm)} ${sourceTag(n.source)}",
+            "${n.destinationName} · 왕복 ${km(n.roundTripKm)} [내비 등록·예정]${if (n.source == Source.SIMULATED) " [모의]" else ""}",
             style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
         )
         if (n.isLongTrip == true && s != null && c != null) {
             val usual = usualKmFor(state, n.date) ?: 0.0
             val extra = (n.roundTripKm - usual).coerceAtLeast(0.0)
-            val impact = n.extraFee ?: CostModel.marginalFee(s, c, extra)
+            val impact = CostModel.marginalFee(s, c, extra)
             val zero = CostModel.zeroFeePace(s, c)
             val after = CostModel.zeroFeePace(s.copy(usedKm = s.usedKm + extra), c)
             V2Caption("평소보다 긴 이동 · 평소보다 +${km(extra)}")

@@ -91,12 +91,12 @@ fun v2Date(value: LocalDate): String = value.format(DateTimeFormatter.ofPattern(
 /** 화면 값이 시드·가짜 게이트웨이에서 왔는지. 그렇다면 [모의]를 붙인다. */
 fun AppUiState.isSimulated(): Boolean = historySimulated || odometer?.source == Source.SIMULATED
 
-@Composable fun V2Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+@Composable fun V2Panel(modifier: Modifier = Modifier, gap: androidx.compose.ui.unit.Dp = V2Tokens.Gap, padding: androidx.compose.ui.unit.Dp = 28.dp, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier.fillMaxWidth(), shape = RoundedCornerShape(V2Tokens.Radius),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), color = MaterialTheme.colorScheme.surface,
     ) {
-        Column(Modifier.padding(28.dp), verticalArrangement = Arrangement.spacedBy(V2Tokens.Gap), content = content)
+        Column(Modifier.padding(padding), verticalArrangement = Arrangement.spacedBy(gap), content = content)
     }
 }
 
